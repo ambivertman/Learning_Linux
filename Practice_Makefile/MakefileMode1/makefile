@@ -1,6 +1,6 @@
 OUT := main
 OBJS := main.o my_add.o
-cc := gcc
+CC := gcc
 
 $(OUT):$(OBJS)
 	$(CC) $^ -o $@
