@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
 
     //通过open创建一个目标文件
     char dst[150] = { 0 };
-    sprintf(dst, "%s/%s", cwd, argv[2]);
+    sprintf(dst, "%s/target/%s", cwd, argv[2]);
     fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     ERROR_CHECK(fd, -1, "open dest file");
 
