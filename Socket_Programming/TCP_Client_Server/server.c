@@ -6,6 +6,10 @@ int main(void) {
     //创建socket对象
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 
+    //实现如果端口被time_wait占用也可以重新使用该端口
+    int reuse = 1;
+    setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+
     //初始化sockaddr结构体
     struct sockaddr_in socketAddr;
     socketAddr.sin_family = AF_INET;
@@ -46,7 +50,10 @@ int main(void) {
         if (FD_ISSET(client_fd, &set)) {
             char buf[60] = { 0 };
             //接收客户端发来的消息
-            recv(client_fd, buf, sizeof(buf), 0);
+            int ret = recv(client_fd, buf, sizeof(buf), 0);
+            if (ret == 0) {
+                break;
+            }
             //打印
             printf("received: %s\n", buf);
         }

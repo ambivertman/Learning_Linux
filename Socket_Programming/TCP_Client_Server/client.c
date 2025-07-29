@@ -37,7 +37,11 @@ int main(void) {
         if (FD_ISSET(socket_fd, &set)) {
             char buf[60] = { 0 };
             //接收客户端发来的消息
-            recv(socket_fd, buf, sizeof(buf), 0);
+            int ret = recv(socket_fd, buf, sizeof(buf), 0);
+            if (ret == 0) {
+                //说明对方已经断开连接
+                break;
+            }
             //打印
             printf("received: %s\n", buf);
         }
