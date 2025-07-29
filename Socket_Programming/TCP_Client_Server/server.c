@@ -22,19 +22,34 @@ int main(void) {
     //accept 返回一个socket对象的文件描述符数组下标
     int client_fd = accept(socket_fd, NULL, NULL);
     printf("Client connected\n");
+
+    //创建监听集合
+    fd_set set;
     while (1) {
-        char buf[60] = { 0 };
+        //初始化监听集合
+        FD_ZERO(&set);
+        //将需要监听的设备加入监听集合
+        FD_SET(STDIN_FILENO, &set);
+        FD_SET(client_fd, &set);
 
-        //接收客户端发来的消息
-        recv(client_fd, buf, sizeof(buf), 0);
-        //打印
-        printf("received: %s\n", buf);
+        //调用select()对设备进行监听
+        //轮询的数量/监听集合/
+        select(client_fd + 1, &set, NULL, NULL, NULL);
 
-
-        //读取键盘输入给客户端发送消息
-        memset(buf, 0, strlen(buf));
-        read(STDIN_FILENO, buf, sizeof(buf));
-        send(client_fd, buf, strlen(buf), 0);
+        //判断是哪个设备就绪
+        if (FD_ISSET(STDIN_FILENO, &set)) {
+            char buf[60] = { 0 };
+            //读取键盘输入给客户端发送消息
+            read(STDIN_FILENO, buf, sizeof(buf));
+            send(client_fd, buf, strlen(buf), 0);
+        }
+        if (FD_ISSET(client_fd, &set)) {
+            char buf[60] = { 0 };
+            //接收客户端发来的消息
+            recv(client_fd, buf, sizeof(buf), 0);
+            //打印
+            printf("received: %s\n", buf);
+        }
     }
 
     return 0;

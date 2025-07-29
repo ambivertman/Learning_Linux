@@ -14,20 +14,34 @@ int main(void) {
     //使用connect进行连接
     connect(socket_fd, (struct sockaddr *)&socketAddr, sizeof(socketAddr));
 
+    //创建监听集合
+    fd_set set;
     while (1) {
-        char buf[60] = { 0 };
-        //读取标准缓冲区发送给服务器
-        read(STDIN_FILENO, buf, sizeof(buf));
-        //发送给服务器
-        send(socket_fd, buf, strlen(buf), 0);
+        //初始化监听集合
+        FD_ZERO(&set);
+        //将需要监听的设备加入监听集合
+        FD_SET(STDIN_FILENO, &set);
+        FD_SET(socket_fd, &set);
 
-        //接收服务器的消息
-        memset(buf, 0, strlen(buf));
-        recv(socket_fd, buf, sizeof(buf), 0);
-        //打印收到的消息
-        printf("received: %s\n", buf);
+        //调用select()对设备进行监听
+        //轮询的数量/监听集合/
+        select(socket_fd + 1, &set, NULL, NULL, NULL);
+
+        //判断是哪个设备就绪
+        if (FD_ISSET(STDIN_FILENO, &set)) {
+            char buf[60] = { 0 };
+            //读取键盘输入给客户端发送消息
+            read(STDIN_FILENO, buf, sizeof(buf));
+            send(socket_fd, buf, strlen(buf), 0);
+        }
+        if (FD_ISSET(socket_fd, &set)) {
+            char buf[60] = { 0 };
+            //接收客户端发来的消息
+            recv(socket_fd, buf, sizeof(buf), 0);
+            //打印
+            printf("received: %s\n", buf);
+        }
     }
-
     close(socket_fd);
     return 0;
 }
