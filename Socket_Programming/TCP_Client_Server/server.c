@@ -1,4 +1,6 @@
 #include<header.h>
+#define MAX_SOCKET 100
+
 
 int main(void) {
     char *ip = "10.0.16.6";
@@ -22,40 +24,57 @@ int main(void) {
     //监听端口, socket_fd, 队列长度
     listen(socket_fd, 10);
 
-    //为完成三次挥手的请求建立一个socket一对一服务
-    //accept 返回一个socket对象的文件描述符数组下标
-    int client_fd = accept(socket_fd, NULL, NULL);
-    printf("Client connected\n");
+    //用于监听服务用户的socket
+    int fds[MAX_SOCKET] = { 0 };
+    int size = 0; //当前监听集大小
 
-    //创建监听集合
-    fd_set set;
+    //创建监听集合并初始化
+    //base_set用于记录下一次循环需要监听的设备
+    fd_set base_set;
+    FD_ZERO(&base_set);
+    FD_SET(socket_fd, &base_set);
+
+
     while (1) {
-        //初始化监听集合
-        FD_ZERO(&set);
-        //将需要监听的设备加入监听集合
-        FD_SET(STDIN_FILENO, &set);
-        FD_SET(client_fd, &set);
-
+        //temp_set用于记录当前循环需要监听的设备
+        fd_set temp_set;
+        memcpy(&temp_set, &base_set, sizeof(base_set));
         //调用select()对设备进行监听
         //轮询的数量/监听集合/
-        select(client_fd + 1, &set, NULL, NULL, NULL);
+        select(MAX_SOCKET, &temp_set, NULL, NULL, NULL);
 
         //判断是哪个设备就绪
-        if (FD_ISSET(STDIN_FILENO, &set)) {
-            char buf[60] = { 0 };
-            //读取键盘输入给客户端发送消息
-            read(STDIN_FILENO, buf, sizeof(buf));
-            send(client_fd, buf, strlen(buf), 0);
+        //如果是socket_fd说明有新链接进入
+        if (FD_ISSET(socket_fd, &temp_set)) {
+            fds[size] = accept(socket_fd, NULL, NULL);
+            FD_SET(fds[size], &base_set);
+            size++;
         }
-        if (FD_ISSET(client_fd, &set)) {
-            char buf[60] = { 0 };
-            //接收客户端发来的消息
-            int ret = recv(client_fd, buf, sizeof(buf), 0);
-            if (ret == 0) {
-                break;
+        //遍历fds查看哪些客户端可读,进行处理
+        for (int i = 0;i < size;i++) {
+            if (FD_ISSET(fds[i], &temp_set)) {
+                char buf[60] = { 0 };
+                //接收客户端发来的消息
+                ssize_t ret = recv(fds[i], buf, sizeof(buf), 0);
+
+                //如果返回值为0,说明该客户端断开连接
+                //需要关闭对于该客户端的监听
+                if (ret == 0) {
+                    FD_CLR(fds[i], &base_set);
+                    close(fds[i]);
+                    //调整剩下的socket对象在fds中的位置
+                    int temp = fds[size - 1];
+                    fds[i] = temp;
+                    fds[size - 1] = 0;
+                }
+                //转发消息
+                for (int j = 0;j < size;j++) {
+                    if (j == i) {
+                        continue;
+                    }
+                    send(fds[j], buf, strlen(buf), 0);
+                }
             }
-            //打印
-            printf("received: %s\n", buf);
         }
     }
 
