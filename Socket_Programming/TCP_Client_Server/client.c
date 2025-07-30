@@ -16,12 +16,17 @@ int main(void) {
 
     //创建监听集合
     fd_set set;
+
+    //用于标记当前的会话状态
+    int flag = 0;
     while (1) {
         //初始化监听集合
         FD_ZERO(&set);
         //将需要监听的设备加入监听集合
         FD_SET(STDIN_FILENO, &set);
-        FD_SET(socket_fd, &set);
+        if (flag == 0) {
+            FD_SET(socket_fd, &set);
+        }
 
         //调用select()对设备进行监听
         //轮询的数量/监听集合/
@@ -31,6 +36,12 @@ int main(void) {
         if (FD_ISSET(STDIN_FILENO, &set)) {
             char buf[60] = { 0 };
             //读取键盘输入给客户端发送消息
+            if (flag == 1) {
+                socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+                connect(socket_fd, (struct sockaddr *)&socketAddr, sizeof(socketAddr));
+                flag = 0;
+            }
+
             read(STDIN_FILENO, buf, sizeof(buf));
             send(socket_fd, buf, strlen(buf), 0);
         }
@@ -40,7 +51,9 @@ int main(void) {
             int ret = recv(socket_fd, buf, sizeof(buf), 0);
             if (ret == 0) {
                 //说明对方已经断开连接
-                break;
+                flag = 1;
+                close(socket_fd);
+                continue;
             }
             //打印
             printf("received: %s\n", buf);

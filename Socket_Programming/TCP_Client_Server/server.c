@@ -1,6 +1,10 @@
 #include<header.h>
 #define MAX_SOCKET 100
 
+typedef struct {
+    int fd;
+    time_t last_time;
+}msg;
 
 int main(void) {
     char *ip = "10.0.16.6";
@@ -25,8 +29,9 @@ int main(void) {
     listen(socket_fd, 10);
 
     //用于监听服务用户的socket
-    int fds[MAX_SOCKET] = { 0 };
-    int size = 0; //当前监听集大小
+    msg list[MAX_SOCKET];
+    memset(list, 0, sizeof(list));
+    int size = 0; //当前socket数量
 
     //创建监听集合并初始化
     //base_set用于记录下一次循环需要监听的设备
@@ -37,46 +42,79 @@ int main(void) {
 
     while (1) {
         //temp_set用于记录当前循环需要监听的设备
+        int net_fd = 0;
         fd_set temp_set;
         memcpy(&temp_set, &base_set, sizeof(base_set));
         //调用select()对设备进行监听
         //轮询的数量/监听集合/
-        select(MAX_SOCKET, &temp_set, NULL, NULL, NULL);
+        //利用select检测是否超时
+
+        struct timeval tv;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+
+        select(MAX_SOCKET, &temp_set, NULL, NULL, &tv);
 
         //判断是哪个设备就绪
         //如果是socket_fd说明有新链接进入
         if (FD_ISSET(socket_fd, &temp_set)) {
-            fds[size] = accept(socket_fd, NULL, NULL);
-            FD_SET(fds[size], &base_set);
+            net_fd = accept(socket_fd, NULL, NULL);
+            FD_SET(net_fd, &base_set);
+            list[size].fd = net_fd;
+            time(&list[size].last_time);
             size++;
         }
         //遍历fds查看哪些客户端可读,进行处理
         for (int i = 0;i < size;i++) {
-            if (FD_ISSET(fds[i], &temp_set)) {
+            net_fd = list[i].fd;
+            if (FD_ISSET(net_fd, &temp_set)) {
                 char buf[60] = { 0 };
                 //接收客户端发来的消息
-                ssize_t ret = recv(fds[i], buf, sizeof(buf), 0);
+                ssize_t ret = recv(net_fd, buf, sizeof(buf), 0);
 
                 //如果返回值为0,说明该客户端断开连接
                 //需要关闭对于该客户端的监听
                 if (ret == 0) {
-                    FD_CLR(fds[i], &base_set);
-                    close(fds[i]);
+                    FD_CLR(net_fd, &base_set);
+                    close(net_fd);
                     //调整剩下的socket对象在fds中的位置
-                    int temp = fds[size - 1];
-                    fds[i] = temp;
-                    fds[size - 1] = 0;
+                    msg temp = list[size - 1];
+                    list[i] = temp;
+                    memset(&list[size - 1], 0, sizeof(msg));
+                    //index=i处的fd被删除,被最后一个替换,所以
+                    //i号需要再访问一次
+                    size--;
+                    i--;
                 }
-                //转发消息
+                //转发消息更新上次激活时间
+                time(&list[i].last_time);
                 for (int j = 0;j < size;j++) {
                     if (j == i) {
                         continue;
                     }
-                    send(fds[j], buf, strlen(buf), 0);
+                    send(list[j].fd, buf, strlen(buf), 0);
                 }
             }
         }
+        //检测超时
+        for (int i = 0;i < size;i++) {
+            time_t now_time;
+            time(&now_time);
+            if (now_time - list[i].last_time > 20) {
+                net_fd = list[i].fd;
+                FD_CLR(net_fd, &base_set);
+                close(net_fd);
+                //调整剩下的socket对象在fds中的位置
+                msg temp = list[size - 1];
+                list[i] = temp;
+                memset(&list[size - 1], 0, sizeof(msg));
+                //index=i处的fd被删除,被最后一个替换,所以
+                //i号需要再访问一次
+                size--;
+                i--;
+            }
+        }
     }
-
+    close(socket_fd);
     return 0;
 }
